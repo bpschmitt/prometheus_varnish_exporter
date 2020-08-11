@@ -79,9 +79,9 @@ spec:
       volumes:
         - name: config-volume
           configMap:
-            name: nri-varnish-prometheus-cfg
+            name: nri-varnish-prometheus-cfg # see configmap.yml
         - name: var
           emptyDir: {}
         - name: vclconfig
           configMap:
-            name: brad-varnish
+            name: brad-varnish # Manually created using my default.vcl
