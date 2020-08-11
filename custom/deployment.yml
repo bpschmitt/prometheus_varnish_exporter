@@ -1,0 +1,87 @@
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: proxy
+  labels:
+    team: platform
+    app: proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: proxy
+  template:
+    metadata:
+      name: proxy
+      labels:
+        app: proxy
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9131"
+    spec:
+      containers:
+      - name: proxy
+        image: bpschmitt/varnish_exporter:1.0
+        imagePullPolicy: Always
+        ports:
+        - name: http
+          containerPort: 80
+        command:
+          - /usr/sbin/varnishd
+        args: 
+          - -f/etc/varnish/default.vcl
+          - -F            # forground
+          - -a0.0.0.0:80  # listen address
+          - -smalloc,300M # storage backend
+          #resources:
+          #  requests:
+          #    cpu: 2
+          #    memory: 100Mi
+          #  limits:
+          #    cpu: 2
+          #    memory: 100Mi
+        volumeMounts:
+          - name: var
+            mountPath: /var/lib/varnish
+          - name: vclconfig
+            mountPath: /etc/varnish
+      - name: exporter
+        image: bpschmitt/varnish_exporter:1.0
+        imagePullPolicy: Always
+        command:
+          - /usr/local/bin/prometheus_varnish_exporter
+        env:
+          - name: VSM_NOPID # required for full Varnish metric list
+            value: "1"
+        ports:
+        - name: metrics
+          containerPort: 9131
+        volumeMounts:
+        - name: var
+          mountPath: /var/lib/varnish
+      - name: nri-prometheus
+        image: newrelic/nri-prometheus:2.0.0
+        args:
+          - "--configfile=/etc/nri-prometheus/config.yaml"
+        ports:
+          - containerPort: 8080
+        volumeMounts:
+        - name: config-volume
+          mountPath: /etc/nri-prometheus/
+        env:
+          - name: "LICENSE_KEY"
+            value: "<NEW RELIC LICENSE KEY>"
+          - name: "BEARER_TOKEN_FILE"
+            value: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+          - name: "CA_FILE"
+            value: "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+      volumes:
+        - name: config-volume
+          configMap:
+            name: nri-varnish-prometheus-cfg
+        - name: var
+          emptyDir: {}
+        - name: vclconfig
+          configMap:
+            name: brad-varnish
